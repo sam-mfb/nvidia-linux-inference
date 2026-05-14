@@ -1,0 +1,12 @@
+[Unit]
+Description=Tailscale up with auth key
+After=tailscaled.service
+Requires=tailscaled.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/tailscale up --authkey-file=/etc/tailscale/authkey --ssh --hostname=4090x2
+
+[Install]
+WantedBy=multi-user.target
