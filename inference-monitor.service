@@ -1,0 +1,6 @@
+[Unit]
+Description=Inference metrics snapshot
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/inference-monitor.sh

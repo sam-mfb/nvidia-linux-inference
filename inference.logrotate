@@ -1,0 +1,13 @@
+/var/log/inference/metrics.csv {
+    daily
+    rotate 30
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0644 root root
+    postrotate
+        # Write fresh header to new file
+        echo "timestamp,gpu0_temp,gpu0_power_w,gpu0_mem_mib,gpu0_util_pct,gpu1_temp,gpu1_power_w,gpu1_mem_mib,gpu1_util_pct,cpu_temp,nvme_temp,load1,mem_used_mib,ollama_status" > /var/log/inference/metrics.csv
+    endscript
+}

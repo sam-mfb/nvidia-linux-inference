@@ -1,0 +1,11 @@
+[Unit]
+Description=Inference metrics logger (every 30s)
+Requires=inference-monitor.service
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=30s
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target
