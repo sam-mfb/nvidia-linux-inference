@@ -1,0 +1,8 @@
+[Unit]
+Description=WireGuard keepalive ping for Ollama long-prefill stability
+After=tailscaled.service
+Wants=tailscaled.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/tailscale-warmkeep.sh

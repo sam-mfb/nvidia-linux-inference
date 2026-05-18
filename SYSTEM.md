@@ -80,6 +80,31 @@ Note: `temp6` showing -55°C and `intrusion0 ALARM` are normal — disconnected
 sensor header and open chassis detect, respectively. `in5`/`in6` ALARM flags
 are unconfigured voltage thresholds, not real alerts.
 
+### Sensor channel mapping
+
+Identified by cross-referencing `sensors` readings against `k10temp` under load (2026-05-17).
+
+**it8696-isa-0a40**
+
+| Channel | Maps to |
+|---------|---------|
+| temp1 | Motherboard zone (ambient ~39°C) |
+| temp2 | Motherboard zone (ambient ~36°C) |
+| temp3 | CPU — tracks k10temp Tctl within 1°C |
+| temp4 | Motherboard zone (~42°C) |
+| temp5 | Motherboard zone (~46°C) |
+| temp6 | Disconnected — always -55°C, ignore |
+
+**it87952-isa-0a60**
+
+| Channel | Maps to |
+|---------|---------|
+| temp1 | Chassis probe (~35°C) |
+| temp2 | Disconnected — always -55°C, ignore |
+| temp3 | Chassis probe (~34°C) |
+
+`it8696 temp3` is a duplicate CPU reading — use `k10temp Tctl` as the authoritative CPU temp.
+
 ### ITE 5711 USB device (048d:5711)
 
 This is the Gigabyte RGB Fusion 2.0 controller — not related to fan/temp sensors.

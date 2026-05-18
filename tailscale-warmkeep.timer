@@ -1,0 +1,10 @@
+[Unit]
+Description=Run tailscale warm-keep every 25s
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=25s
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target
