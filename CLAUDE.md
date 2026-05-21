@@ -1,12 +1,18 @@
-# Inference Machine — Claude Instructions
+# Inference Machines — Claude Instructions
 
-This repo lives at `/home/sam/inference` on `4090x2`, a headless dual-RTX-4090 inference server.
-See `SYSTEM.md` for full hardware specs.
+This repo manages two headless inference servers on the same tailnet. See `SYSTEM.md` for full hardware specs.
+
+| Machine | Hostname | GPU | Tailscale IP |
+|---------|----------|-----|--------------|
+| `nvidia6000` | nvidia6000 | RTX PRO 6000 Blackwell (96 GB) — single | TBD after tailscale setup |
+| `4090x2` | 4090x2 | RTX 4090 × 2 (24 GB each) | 100.88.241.33 |
+
+Repo lives at `/home/sam/nvidia-linux-inference` on both machines.
 
 ## What's in this repo
 
-Config files that are deployed to system paths. The repo is the source of truth;
-copy files to their destinations after editing (see paths below).
+Config files deployed to system paths. The repo is the source of truth;
+copy files to their destinations after editing.
 
 | File | Deployed to |
 |------|------------|
@@ -17,7 +23,7 @@ copy files to their destinations after editing (see paths below).
 | `inference-monitor.timer` | `/etc/systemd/system/inference-monitor.timer` |
 | `inference.logrotate` | `/etc/logrotate.d/inference` |
 | `journald-persistence.conf` | `/etc/systemd/journald.conf.d/persistence.conf` |
-| `it87/` | submodule — built and installed via `make && sudo make install` |
+| `it87/` | **4090x2 only** — submodule, `make && sudo make install` |
 
 ## Ollama
 
@@ -39,6 +45,9 @@ ollama pull <model>
 
 ### Query from another tailnet node
 ```bash
+curl http://nvidia6000:11434/api/tags
+OLLAMA_HOST=http://nvidia6000:11434 ollama run <model>
+
 curl http://4090x2:11434/api/tags
 OLLAMA_HOST=http://4090x2:11434 ollama run gemma4:26b-a4b-it-q8_0
 ```
@@ -57,26 +66,42 @@ sudo systemctl restart ollama
 
 ## GPU
 
-Both RTX 4090s are compute-only (no display connected).
-
+### nvidia6000 — RTX PRO 6000 Blackwell (single GPU)
 ```bash
-nvidia-smi                          # status snapshot
+nvidia-smi
+nvidia-smi dmon -s pcut
+watch -n2 nvidia-smi
+```
+
+### 4090x2 — dual RTX 4090
+```bash
+nvidia-smi                          # status snapshot (shows both GPUs)
 nvidia-smi dmon -s pcut            # live: power, utilisation, temp per GPU
 watch -n2 nvidia-smi               # refresh every 2s
 ```
 
-Driver: 595.58.03 (nvidia-headless-no-dkms-595-server-open)
-CUDA: 13.2
+Driver: 595.x-server (nvidia-headless-no-dkms-595-server-open) on both machines.
 
 ## Monitoring
 
 A systemd timer runs `/usr/local/bin/inference-monitor.sh` every 30 seconds and appends
-a CSV row to `/var/log/inference/metrics.csv`. Columns:
+a CSV row to `/var/log/inference/metrics.csv`.
 
+The CSV schema differs by machine:
+
+**nvidia6000** (single GPU, ASUS board sensors):
+```
+timestamp, gpu0_temp, gpu0_power_w, gpu0_mem_mib, gpu0_util_pct,
+cpu_temp, nvme_temp, load1, mem_used_mib, ollama_status,
+asusec_cpu, asusec_pkg, asusec_mb, asusec_vrm
+```
+
+**4090x2** (dual GPU, ITE IT8696 board sensors):
 ```
 timestamp, gpu0_temp, gpu0_power_w, gpu0_mem_mib, gpu0_util_pct,
 gpu1_temp, gpu1_power_w, gpu1_mem_mib, gpu1_util_pct,
-cpu_temp, nvme_temp, load1, mem_used_mib, ollama_status
+cpu_temp, nvme_temp, load1, mem_used_mib, ollama_status,
+it8696_t1, it8696_t2, it8696_t3, it8696_t4, it8696_t5, it87952_t1, it87952_t3
 ```
 
 ```bash
@@ -108,27 +133,31 @@ last -x | grep -E "reboot|shutdown"
 ## Temperatures / fans
 
 ```bash
-sensors        # all sensors (it87 + k10temp + nvme + NICs)
+sensors        # all sensors (requires lm-sensors)
 ```
 
-Fan sensors require the `it87` module (out-of-tree, loaded via `/etc/modules-load.d/it87.conf`
-with `ignore_resource_conflict=1`). Source is the `it87/` submodule.
+**nvidia6000**: Board sensors via in-kernel `asus-ec-sensors` driver. No extra setup needed.
+The monitor script reads `asusec` via sysfs directly (not in lm-sensors chip database).
+
+**4090x2**: Fan sensors require the `it87` module (out-of-tree, loaded via
+`/etc/modules-load.d/it87.conf` with `ignore_resource_conflict=1`). Source is the `it87/` submodule.
 
 ## Tailscale
 
-Node name: `4090x2` | Tailscale IP: `100.88.241.33`
+`tailscale-up.service` uses `%H` (systemd hostname specifier) so the same file works on both machines.
+Auth key stored at `/etc/tailscale/authkey` (root:root, 600) — not in this repo.
 
 ```bash
 tailscale status     # see all nodes
+tailscale ping nvidia6000
 tailscale ping 4090x2
 ```
 
-Auth key stored at `/etc/tailscale/authkey` (root:root, 600) — not in this repo.
-SSH via Tailscale: `ssh sam@4090x2` from any tailnet node.
+SSH via Tailscale: `ssh sam@<hostname>` from any tailnet node.
 
 ## Storage / LVM
 
-Root LV was expanded from 100 GB to fill the VG. If disk fills again:
+Root LV was set to 100 GB on both machines. If disk fills:
 ```bash
 df -h /
 sudo vgs                                        # check VG free space

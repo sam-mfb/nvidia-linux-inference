@@ -6,7 +6,7 @@ Requires=tailscaled.service
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/usr/bin/tailscale up --auth-key=file:/etc/tailscale/authkey --ssh --hostname=4090x2
+ExecStart=/usr/bin/tailscale up --auth-key=file:/etc/tailscale/authkey --ssh --hostname=%H
 
 [Install]
 WantedBy=multi-user.target
