@@ -22,15 +22,34 @@ GPU is compute-only — no display connected.
 
 ### NVIDIA Setup
 
-Same compute-only driver stack as `4090x2`:
-
-```
-nvidia-headless-no-dkms-595-server-open
-nvidia-compute-utils-595-server
-nvidia-utils-595-server
-```
-
 Driver: 595.71.05 | CUDA: 13.2
+
+**Blackwell (GB202GL) requires the open kernel module.** The closed/proprietary driver fails with
+`RmInitAdapter failed` and `nvidia-smi` returns "No devices were found". Ubuntu's packaged
+`nvidia-firmware-595` omits GB202 firmware, but the open module works regardless.
+
+Installed packages:
+```
+linux-modules-nvidia-595-open-7.0.0-15-generic   # open kernel module (kernel-version-specific)
+linux-objects-nvidia-595-7.0.0-15-generic
+linux-signatures-nvidia-7.0.0-15-generic
+nvidia-firmware-595-595.71.05
+nvidia-kernel-common-595
+libnvidia-compute-595
+nvidia-compute-utils-595
+nvidia-utils-595
+```
+
+Do **not** install `linux-modules-nvidia-595-7.0.0-15-generic` (the proprietary module) — it will
+shadow the open module and break GPU access. If both end up installed, remove the proprietary one:
+```bash
+sudo apt remove linux-modules-nvidia-595-7.0.0-15-generic
+sudo depmod -a
+```
+
+On kernel upgrade, the kernel-version-specific package (`linux-modules-nvidia-595-open-<kver>`)
+must be installed for the new kernel. The meta-package `linux-modules-nvidia-595-generic` pulls
+this in automatically.
 
 ### Fan / Temperature Monitoring
 
@@ -151,7 +170,7 @@ nvme0n1 (1.8 TB)
 ├── nvme0n1p1   1 GB    EFI
 ├── nvme0n1p2   2 GB    /boot
 └── nvme0n1p3   1.8 TB  LVM
-    └── ubuntu--vg-ubuntu--lv  100 GB  /
+    └── ubuntu--vg-ubuntu--lv  1.8 TB  /
 ```
 
-LVM volume group has ~1.7 TB unallocated — expand or add LVs as needed.
+Root LV has been extended to fill the VG on both machines.

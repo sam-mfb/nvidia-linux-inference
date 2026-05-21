@@ -4,7 +4,7 @@ This repo manages two headless inference servers on the same tailnet. See `SYSTE
 
 | Machine | Hostname | GPU | Tailscale IP |
 |---------|----------|-----|--------------|
-| `nvidia6000` | nvidia6000 | RTX PRO 6000 Blackwell (96 GB) — single | TBD after tailscale setup |
+| `nvidia6000` | nvidia6000 | RTX PRO 6000 Blackwell (96 GB) — single | 100.92.253.56 |
 | `4090x2` | 4090x2 | RTX 4090 × 2 (24 GB each) | 100.88.241.33 |
 
 Repo lives at `/home/sam/nvidia-linux-inference` on both machines.
@@ -80,7 +80,7 @@ nvidia-smi dmon -s pcut            # live: power, utilisation, temp per GPU
 watch -n2 nvidia-smi               # refresh every 2s
 ```
 
-Driver: 595.x-server (nvidia-headless-no-dkms-595-server-open) on both machines.
+Driver: 595.x on both machines. **nvidia6000** uses the open kernel module (required for Blackwell — see SYSTEM.md). **4090x2** uses the server-open variant.
 
 ## Monitoring
 
