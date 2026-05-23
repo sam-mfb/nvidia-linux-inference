@@ -93,7 +93,7 @@ The CSV schema differs by machine:
 ```
 timestamp, gpu0_temp, gpu0_power_w, gpu0_mem_mib, gpu0_util_pct,
 cpu_temp, nvme_temp, load1, mem_used_mib, ollama_status,
-asusec_cpu, asusec_pkg, asusec_mb, asusec_vrm
+asusec_cpu, asusec_pkg, asusec_mb, asusec_vrm, fan_rpm
 ```
 
 **4090x2** (dual GPU, ITE IT8696 board sensors):

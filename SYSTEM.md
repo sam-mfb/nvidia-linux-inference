@@ -14,11 +14,16 @@ Both machines run Ubuntu 26.04 LTS "Resolute", kernel `7.0.0-15-generic`, AMD Ry
 | **iGPU** | AMD Radeon Graphics (Granite Ridge, integrated — not used for compute) |
 | **Storage** | NVMe SSD 1.8 TB (`nvme0n1`, PCIe 02:00.0) |
 | **Motherboard** | ASUSTeK ProArt X870E-CREATOR WIFI (AMD X870E) |
-| **NIC 1** | Aquantia AQC113 — 10 GbE (PCIe 0b:00.0) |
-| **NIC 2** | Intel I226-V — 2.5 GbE (PCIe 0a:00.0) |
+| **NIC 1** | Aquantia AQC113 — 10 GbE (PCIe 0b:00.0) — **active** |
+| **NIC 2** | Intel I226-V — 2.5 GbE (PCIe 0a:00.0) — flaky, see note below |
 | **WiFi** | Qualcomm WCN785x — WiFi 7 (802.11be) |
 
 GPU is compute-only — no display connected.
+
+#### Networking note
+
+The Intel I226-V 2.5 GbE NIC is flaky due to a known L0 power state bug — expected to be fixed
+in a future kernel. The Aquantia AQC113 10 GbE NIC is used instead until then.
 
 ### NVIDIA Setup
 
