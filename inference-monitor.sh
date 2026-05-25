@@ -8,7 +8,7 @@ mkdir -p /var/log/inference
 # Write header if file is new
 if [ ! -s "$LOG" ]; then
     if [ "$MACHINE" = "nvidia6000" ]; then
-        echo "timestamp,gpu0_temp,gpu0_power_w,gpu0_mem_mib,gpu0_util_pct,cpu_temp,nvme_temp,load1,mem_used_mib,ollama_status,asusec_cpu,asusec_pkg,asusec_mb,asusec_vrm,fan_rpm" >> "$LOG"
+        echo "timestamp,gpu0_temp,gpu0_power_w,gpu0_mem_mib,gpu0_util_pct,cpu_temp,nvme_temp,load1,mem_used_mib,ollama_status,asusec_cpu,asusec_pkg,asusec_mb,asusec_vrm,fan_rpm,cpu_pkg_w" >> "$LOG"
     else
         # 4090x2: dual GPU + ITE IT8696 board sensors
         echo "timestamp,gpu0_temp,gpu0_power_w,gpu0_mem_mib,gpu0_util_pct,gpu1_temp,gpu1_power_w,gpu1_mem_mib,gpu1_util_pct,cpu_temp,nvme_temp,load1,mem_used_mib,ollama_status,it8696_t1,it8696_t2,it8696_t3,it8696_t4,it8696_t5,it87952_t1,it87952_t3" >> "$LOG"
@@ -49,7 +49,12 @@ if [ "$MACHINE" = "nvidia6000" ]; then
     ASUSEC_VRM=$(awk '{printf "%.1f", $1/1000}' "${HW}/temp5_input" 2>/dev/null)
     FAN_RPM=$(cat "${HW}/fan1_input" 2>/dev/null)
 
-    echo "${TS},${GPU0_TEMP},${GPU0_POW},${GPU0_MEM},${GPU0_UTIL},${CPU_TEMP},${NVME_TEMP},${LOAD1},${MEM_USED},${OLLAMA_STATUS},${ASUSEC_CPU},${ASUSEC_PKG},${ASUSEC_MB},${ASUSEC_VRM},${FAN_RPM}" >> "$LOG"
+    # CPU package power via RAPL (1-second sample)
+    RAPL=/sys/class/powercap/intel-rapl:0/energy_uj
+    E1=$(cat "$RAPL" 2>/dev/null); sleep 1; E2=$(cat "$RAPL" 2>/dev/null)
+    CPU_PKG_W=$(awk "BEGIN {printf \"%.1f\", ($E2 - $E1) / 1000000}" 2>/dev/null)
+
+    echo "${TS},${GPU0_TEMP},${GPU0_POW},${GPU0_MEM},${GPU0_UTIL},${CPU_TEMP},${NVME_TEMP},${LOAD1},${MEM_USED},${OLLAMA_STATUS},${ASUSEC_CPU},${ASUSEC_PKG},${ASUSEC_MB},${ASUSEC_VRM},${FAN_RPM},${CPU_PKG_W}" >> "$LOG"
 else
     # 4090x2: Gigabyte AORUS 870E, dual RTX 4090, ITE IT8696 via out-of-tree it87 module
     read GPU1_TEMP GPU1_POW GPU1_MEM GPU1_UTIL < <(
