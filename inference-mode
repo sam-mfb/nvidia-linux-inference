@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# Switch between Ollama and the transcription server.
+# Usage:
+#   inference-mode status
+#   inference-mode ollama
+#   inference-mode transcribe
+#
+# Deployed to /usr/local/bin/inference-mode
+
+set -euo pipefail
+
+usage() {
+    echo "Usage: inference-mode <ollama|transcribe|status>"
+    exit 1
+}
+
+status() {
+    local ollama_active transcribe_active
+    ollama_active=$(systemctl is-active ollama 2>/dev/null || true)
+    transcribe_active=$(systemctl is-active transcribe 2>/dev/null || true)
+
+    if [ "$ollama_active" = "active" ] && [ "$transcribe_active" = "active" ]; then
+        echo "WARNING: both services are running (should not happen)"
+        echo "  ollama:     $ollama_active"
+        echo "  transcribe: $transcribe_active"
+    elif [ "$ollama_active" = "active" ]; then
+        echo "Mode: ollama  (transcribe: $transcribe_active)"
+    elif [ "$transcribe_active" = "active" ]; then
+        echo "Mode: transcribe  (ollama: $ollama_active)"
+    else
+        echo "Mode: none  (both stopped)"
+        echo "  ollama:     $ollama_active"
+        echo "  transcribe: $transcribe_active"
+    fi
+}
+
+switch_to() {
+    local target=$1
+    local other
+    [ "$target" = "ollama" ] && other="transcribe" || other="ollama"
+
+    local other_active
+    other_active=$(systemctl is-active "$other" 2>/dev/null || true)
+
+    if [ "$other_active" = "active" ]; then
+        echo "Stopping $other..."
+        sudo systemctl stop "$other"
+    fi
+
+    local target_active
+    target_active=$(systemctl is-active "$target" 2>/dev/null || true)
+
+    if [ "$target_active" = "active" ]; then
+        echo "$target is already running."
+    else
+        echo "Starting $target..."
+        sudo systemctl start "$target"
+        echo "$target started."
+    fi
+
+    echo ""
+    status
+}
+
+[ $# -eq 1 ] || usage
+
+case "$1" in
+    status)  status ;;
+    ollama)  switch_to ollama ;;
+    transcribe) switch_to transcribe ;;
+    *) usage ;;
+esac

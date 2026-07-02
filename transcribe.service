@@ -1,0 +1,29 @@
+[Unit]
+Description=Transcription Server (WhisperX + diarization)
+After=network.target
+# Cannot run alongside Ollama — they'd contend for both GPUs
+Conflicts=ollama.service
+
+[Service]
+Type=simple
+User=sam
+Group=sam
+
+EnvironmentFile=/etc/transcribe/config.env
+ExecStart=/opt/transcribe/venv/bin/python /opt/transcribe/transcribe-server.py
+
+Restart=on-failure
+RestartSec=10
+
+# Give models time to load before marking service active
+TimeoutStartSec=120
+
+# Large file uploads need room
+LimitNOFILE=65536
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=transcribe
+
+[Install]
+WantedBy=multi-user.target

@@ -24,6 +24,9 @@ copy files to their destinations after editing.
 | `inference.logrotate` | `/etc/logrotate.d/inference` |
 | `journald-persistence.conf` | `/etc/systemd/journald.conf.d/persistence.conf` |
 | `it87/` | **4090x2 only** — submodule, `make && sudo make install` |
+| `transcribe-server.py` | **4090x2 only** — `/opt/transcribe/transcribe-server.py` |
+| `transcribe.service` | **4090x2 only** — `/etc/systemd/system/transcribe.service` |
+| `inference-mode` | **4090x2 only** — `/usr/local/bin/inference-mode` |
 
 ## Ollama
 
@@ -154,6 +157,65 @@ tailscale ping 4090x2
 ```
 
 SSH via Tailscale: `ssh sam@<hostname>` from any tailnet node.
+
+## Transcription Server
+
+WhisperX (`large-v3`) + pyannote diarization. Whisper on `cuda:0`, diarization on `cuda:1`.
+**Cannot run alongside Ollama** — `Conflicts=ollama.service` is set in the unit file.
+
+| File | Deployed to |
+|------|------------|
+| `transcribe-server.py` | `/opt/transcribe/transcribe-server.py` |
+| `transcribe.service` | `/etc/systemd/system/transcribe.service` |
+
+Config at `/etc/transcribe/config.env` (root:sam 640) — contains `HF_TOKEN`, not in this repo.
+Data (uploads, results, SQLite DB) at `/var/lib/transcribe/`.
+Virtualenv at `/opt/transcribe/venv/`.
+
+### Install (first time)
+```bash
+HF_TOKEN=hf_... ./install-transcribe.sh
+```
+
+### Switch modes
+```bash
+inference-mode transcribe   # stop Ollama, start transcription server
+inference-mode ollama       # stop transcription, start Ollama
+inference-mode status       # show which is currently running
+```
+
+See `TRANSCRIBE.md` for full client usage docs.
+
+### Usage
+```bash
+# Submit a file
+curl -X POST http://4090x2:8765/transcribe \
+  -F file=@interview.mp4 \
+  -F num_speakers=2
+
+# Poll for result
+curl http://4090x2:8765/jobs/<job_id>
+
+# Download as SRT
+curl "http://4090x2:8765/jobs/<job_id>?format=srt"
+
+# Plain text with speaker labels
+curl "http://4090x2:8765/jobs/<job_id>?format=txt"
+
+# List recent jobs
+curl http://4090x2:8765/jobs
+
+# Health / model status
+curl http://4090x2:8765/health
+```
+
+Accepts: mp3, wav, flac, m4a, ogg (audio) and mp4, mkv, mov, avi, webm (video — ffmpeg extracts audio).
+Optional form fields: `num_speakers` (int), `language` (ISO code e.g. `en`) — both auto-detected if omitted.
+
+### Logs
+```bash
+journalctl -u transcribe -f
+```
 
 ## Storage / LVM
 
