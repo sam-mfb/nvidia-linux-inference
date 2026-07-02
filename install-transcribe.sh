@@ -11,7 +11,14 @@ SERVER_SRC="$(cd "$(dirname "$0")" && pwd)/transcribe-server.py"
 
 # ── system deps ───────────────────────────────────────────────────────────────
 echo "→ Checking system deps..."
-sudo apt-get install -y --no-install-recommends ffmpeg python3-venv python3-dev
+# PyTorch requires Python ≤ 3.12; install 3.12 via deadsnakes if needed
+if ! command -v python3.12 &>/dev/null; then
+    echo "→ Installing Python 3.12 (PyTorch doesn't support 3.13+ yet)..."
+    sudo add-apt-repository -y ppa:deadsnakes/ppa
+    sudo apt-get update -q
+    sudo apt-get install -y --no-install-recommends python3.12 python3.12-venv python3.12-dev
+fi
+sudo apt-get install -y --no-install-recommends ffmpeg
 
 # ── install dir ───────────────────────────────────────────────────────────────
 echo "→ Setting up $INSTALL_DIR ..."
@@ -21,8 +28,8 @@ sudo chown -R sam:sam "$INSTALL_DIR"
 
 # ── virtualenv ────────────────────────────────────────────────────────────────
 if [ ! -f "$INSTALL_DIR/venv/bin/python" ]; then
-    echo "→ Creating virtualenv..."
-    python3 -m venv "$INSTALL_DIR/venv"
+    echo "→ Creating virtualenv (Python 3.12)..."
+    python3.12 -m venv "$INSTALL_DIR/venv"
 fi
 
 echo "→ Installing PyTorch (CUDA 12.4)..."
