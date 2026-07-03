@@ -65,8 +65,10 @@ def load_models():
 
     if HF_TOKEN:
         log.info("Loading diarization pipeline on cuda:1 ...")
-        _diarizer = whisperx.DiarizationPipeline(
-            use_auth_token=HF_TOKEN, device="cuda:1"
+        from whisperx.diarize import DiarizationPipeline
+        _diarizer = DiarizationPipeline(
+            model_name="pyannote/speaker-diarization-3.1",
+            token=HF_TOKEN, device="cuda:1"
         )
     else:
         log.warning("HF_TOKEN not set — diarization disabled")
