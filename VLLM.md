@@ -111,6 +111,50 @@ request body:
 The reasoning comes back in the message's `reasoning` field, separate from `content`.
 Thinking uses extra output tokens, so raise `max_tokens`.
 
+### opencode (from another tailnet host)
+
+Add a custom OpenAI-compatible provider to `~/.config/opencode/opencode.json` (or a
+project's `opencode.json`) on the client machine:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "nvidia6000": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "nvidia6000 (vLLM)",
+      "options": { "baseURL": "http://nvidia6000:8000/v1" },
+      "models": {
+        "qwen3-coder-next": { "name": "Qwen3 Coder Next", "limit": { "context": 262144, "output": 32768 } },
+        "gemma4-31b":       { "name": "Gemma 4 31B",      "limit": { "context": 262144, "output": 32768 } },
+        "gemma4-26b":       { "name": "Gemma 4 26B-A4B",  "limit": { "context": 262144, "output": 32768 } }
+      }
+    },
+    "4090x2": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "4090x2 (vLLM)",
+      "options": { "baseURL": "http://4090x2:8000/v1" },
+      "models": {
+        "qwen3-coder-30b": { "name": "Qwen3 Coder 30B", "limit": { "context": 65536, "output": 8192 } },
+        "gemma4-31b":      { "name": "Gemma 4 31B",     "limit": { "context": 32768, "output": 8192 } },
+        "gemma4-26b":      { "name": "Gemma 4 26B-A4B", "limit": { "context": 32768, "output": 8192 } }
+      }
+    }
+  },
+  "model": "nvidia6000/qwen3-coder-next"
+}
+```
+
+Pick a different model in opencode with `/models`.
+
+- **Only the running profile answers.** Selecting any other model errors until you switch
+  the server to it with `inference-mode vllm <profile>`.
+- **Model keys must match profile names exactly** (vLLM serves each model under its
+  profile name). Limits mirror each profile's `--max-model-len`; input + output share it.
+- **No API key** — access is controlled by Tailscale.
+- **Check reachability from the client:** `curl http://nvidia6000:8000/v1/models`. If the
+  hostname doesn't resolve, use the Tailscale IP in `baseURL`.
+
 ## Gotchas (all handled by `install-vllm.sh` / `vllm@.service`)
 
 - **No C compiler → Triton fails at startup** ("Failed to find C compiler").
