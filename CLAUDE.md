@@ -23,6 +23,7 @@ copy files to their destinations after editing.
 | `inference-monitor.timer` | `/etc/systemd/system/inference-monitor.timer` |
 | `inference.logrotate` | `/etc/logrotate.d/inference` |
 | `journald-persistence.conf` | `/etc/systemd/journald.conf.d/persistence.conf` |
+| `gpu-check` | `/usr/local/bin/gpu-check` |
 | `it87/` | **4090x2 only** — submodule, `make && sudo make install` |
 | `transcribe-server.py` | **4090x2 only** — `/opt/transcribe/transcribe-server.py` |
 | `transcribe.service` | **4090x2 only** — `/etc/systemd/system/transcribe.service` |
@@ -82,6 +83,14 @@ nvidia-smi                          # status snapshot (shows both GPUs)
 nvidia-smi dmon -s pcut            # live: power, utilisation, temp per GPU
 watch -n2 nvidia-smi               # refresh every 2s
 ```
+
+### Health check
+```bash
+gpu-check          # driver module for running kernel, nvidia-smi, Ollama using GPU
+gpu-check --fix    # install missing module, modprobe, restart Ollama (needs sudo, real terminal)
+```
+Most common failure: a kernel upgrade without the matching `linux-modules-nvidia-*-open-<kver>`
+package — nvidia-smi fails and Ollama silently falls back to CPU.
 
 Driver: 595.x on both machines. **nvidia6000** uses the open kernel module (required for Blackwell — see SYSTEM.md). **4090x2** uses the server-open variant.
 

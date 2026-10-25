@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+# Check that the NVIDIA driver works for the running kernel and that Ollama is
+# using the GPU. Common failure: a kernel upgrade without a matching
+# linux-modules-nvidia-* package, leaving Ollama silently running on CPU.
+# Usage:
+#   gpu-check          report status
+#   gpu-check --fix    install the module for the running kernel, load it,
+#                      restart Ollama (needs sudo; run from a real terminal)
+#
+# Deployed to /usr/local/bin/gpu-check
+
+set -uo pipefail
+
+KVER=$(uname -r)
+ok()   { echo "  [ OK ] $*"; }
+bad()  { echo "  [FAIL] $*"; FAILED=1; }
+warn() { echo "  [WARN] $*"; }
+FAILED=0
+
+# Module flavour from installed packages, e.g. "595-open" (nvidia6000) or
+# "595-server-open" (4090x2). Never fall back to the proprietary flavour —
+# it breaks Blackwell.
+flavour() {
+    dpkg-query -W -f='${db:Status-Abbrev} ${Package}\n' 'linux-modules-nvidia-*' 2>/dev/null \
+        | awk '$1 == "ii" {print $2}' \
+        | sed -nE 's/^linux-modules-nvidia-(.+-open)-[0-9.]+-[0-9]+-generic$/\1/p' \
+        | sort -u | tail -1
+}
+FLAVOUR=$(flavour)
+FLAVOUR=${FLAVOUR:-595-open}
+META_PKG="linux-modules-nvidia-${FLAVOUR}-generic"
+
+check() {
+    echo "Kernel: $KVER"
+
+    if modinfo -k "$KVER" nvidia >/dev/null 2>&1; then
+        ok "nvidia module installed for $KVER ($(modinfo -k "$KVER" -F version nvidia))"
+    else
+        bad "no nvidia module for $KVER — install $META_PKG"
+    fi
+
+    if lsmod | grep -q '^nvidia '; then
+        ok "nvidia module loaded"
+    else
+        bad "nvidia module not loaded"
+    fi
+
+    if out=$(nvidia-smi --query-gpu=index,name,memory.used,memory.total,temperature.gpu \
+                        --format=csv,noheader 2>&1); then
+        ok "nvidia-smi:"
+        echo "$out" | sed 's/^/           /'
+    else
+        bad "nvidia-smi failed: $(echo "$out" | head -1)"
+    fi
+
+    local ollama_active
+    ollama_active=$(systemctl is-active ollama 2>/dev/null || true)
+    if [ "$ollama_active" != "active" ]; then
+        warn "ollama is $ollama_active (transcribe mode?) — skipping Ollama check"
+    else
+        # Ollama logs its detected compute devices at startup
+        local compute
+        compute=$(journalctl -u ollama -b --no-pager 2>/dev/null \
+                  | grep 'msg="inference compute"' | tail -1)
+        if [ -z "$compute" ]; then
+            warn "couldn't find Ollama's device detection in the journal"
+        elif echo "$compute" | grep -q 'library=cpu'; then
+            bad "Ollama detected no GPU at startup (running on CPU) — restart it once the GPU works"
+        else
+            ok "Ollama detected GPU: $(echo "$compute" | grep -oE 'library=[^ ]+|description="[^"]*"' | tr '\n' ' ')"
+        fi
+    fi
+
+    echo ""
+    if [ "$FAILED" -eq 0 ]; then
+        echo "All good."
+    else
+        echo "Problems found. Run: gpu-check --fix"
+    fi
+    return "$FAILED"
+}
+
+fix() {
+    if ! modinfo -k "$KVER" nvidia >/dev/null 2>&1; then
+        echo "Installing $META_PKG..."
+        sudo apt-get install -y "$META_PKG" || exit 1
+    fi
+
+    if ! lsmod | grep -q '^nvidia '; then
+        echo "Loading nvidia module..."
+        if ! sudo modprobe nvidia; then
+            echo "modprobe failed — reboot to finish: sudo reboot"
+            exit 1
+        fi
+    fi
+
+    if [ "$(systemctl is-active ollama 2>/dev/null)" = "active" ]; then
+        echo "Restarting Ollama..."
+        sudo systemctl restart ollama
+        sleep 5
+    fi
+
+    echo ""
+    check
+}
+
+case "${1:-}" in
+    "")     check ;;
+    --fix)  fix ;;
+    *)      echo "Usage: gpu-check [--fix]"; exit 1 ;;
+esac
