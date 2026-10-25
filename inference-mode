@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Switch which inference service owns the GPU(s). The chosen mode is also
 # enabled at boot and the others disabled, so it survives a reboot.
+# Choosing the mode that's already running restarts it (e.g. after editing a
+# vLLM profile). Uses sudo — run from a real terminal.
 # Usage:
 #   inference-mode status
 #   inference-mode vllm <profile>    profiles are /etc/vllm/<profile>.conf
@@ -83,11 +85,18 @@ switch_to() {
         fi
     done
 
-    echo "Starting ${target%.service}..."
-    sudo systemctl enable --now --quiet "$target"
+    sudo systemctl enable --quiet "$target"
+    if [ "$(systemctl is-active "$target" 2>/dev/null)" = "active" ]; then
+        # Already running: restart so edits to its profile/unit take effect
+        echo "Restarting ${target%.service}..."
+        sudo systemctl restart "$target"
+    else
+        echo "Starting ${target%.service}..."
+        sudo systemctl start "$target"
+    fi
 
     if [[ "$target" == vllm@* ]]; then
-        echo "Loading the model takes a few minutes (longer on first download):"
+        echo "Loading the model takes 1–2 min (much longer on first start: weights download):"
         echo "  journalctl -u ${target%.service} -f"
     fi
 

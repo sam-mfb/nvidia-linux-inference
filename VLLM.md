@@ -5,8 +5,10 @@ vLLM serves one model at a time, reserves ~90% of VRAM up front, and exposes an
 OpenAI-compatible API on port 8000. It cannot share the GPU(s) with Ollama or the
 transcription server — `inference-mode` switches between them.
 
-- API base: `http://<host>:8000/v1`
-- Model name in requests: the profile name (e.g. `qwen3-coder-next`)
+- API base: `http://<host>:8000/v1` (`nvidia6000` or `4090x2`)
+- Model name in requests: the profile name (e.g. `qwen3-coder-next`) — only the profile
+  currently running is available; `curl http://<host>:8000/v1/models` shows which
+- Max 64 concurrent requests per server (`--max-num-seqs 64`); more are queued
 
 ---
 
@@ -28,7 +30,9 @@ with weights cached. Gemma 31B at BF16 ran ~25 tok/s with only 128K context, hen
 
 ### 4090x2 (2 × RTX 4090, 48 GB, tensor-parallel across both)
 
-Untested — 4090x2 was offline when these were written.
+**Untested** — 4090x2 was offline when these were written. Sizes fit on paper; expect
+to tune `--max-model-len` / `--gpu-memory-utilization` on first run. Bring-up steps are
+under [Setup](#setup).
 
 | Profile | Model | Weights | Context |
 |---------|-------|---------|---------|
@@ -36,25 +40,41 @@ Untested — 4090x2 was offline when these were written.
 | `gemma4-31b` | google/gemma-4-31B-it-qat-w4a16-ct — Google's 4-bit QAT | ~23 GB | 32K |
 | `gemma4-26b` | google/gemma-4-26B-A4B-it, quantised to FP8 at load | ~26 GB | 32K |
 
-Qwen3-Coder-Next doesn't fit on 4090x2 (80 GB at FP8). Gemma profiles have tool calling
-and thinking mode enabled (`--reasoning-parser gemma4`); Qwen profiles have tool calling.
+Qwen3-Coder-Next doesn't fit on 4090x2 (80 GB at FP8).
+
+All profiles support OpenAI-style tool calling. Gemma profiles also support thinking mode
+(off by default; enable per request — see [Usage](#usage)). Qwen coder models don't think.
 
 ### Adding or changing a profile
 
-Edit/add `vllm/<hostname>/<profile>.conf`, re-run `./install-vllm.sh`, then
-`inference-mode vllm <profile>` (restarts it if already running). Weights download to
-`~sam/.cache/huggingface` on first start.
+1. Edit/add `vllm/<hostname>/<profile>.conf` — `VLLM_MODEL` is the Hugging Face repo id,
+   `VLLM_ARGS` the extra `vllm serve` flags (one line; no quotes needed).
+2. `./install-vllm.sh` — copies profiles to `/etc/vllm/`.
+3. `inference-mode vllm <profile>` — starts it, or restarts it if it's already running.
+
+A new model's weights download to `~sam/.cache/huggingface` on its first start, which can
+take a while for large models; the server isn't ready until that and loading finish.
 
 ---
 
 ## Setup
 
+Both commands use sudo, so run them from a real terminal (not Claude Code's `!`).
+
 ```bash
-./install-vllm.sh                      # uv, venv at /opt/vllm/venv, profiles, unit, inference-mode
-inference-mode vllm qwen3-coder-next   # stop Ollama, start + enable at boot
+cd ~/nvidia-linux-inference
+git pull
+./install-vllm.sh                      # gcc, uv, venv at /opt/vllm/venv, profiles, unit,
+                                       # overcommit sysctl, inference-mode
+inference-mode vllm qwen3-coder-next   # 4090x2: qwen3-coder-30b
 ```
 
-vLLM version is pinned in `install-vllm.sh` (`VLLM_VERSION`); bump and re-run to upgrade.
+The second command stops Ollama, starts the profile, and makes it the mode that starts at
+boot. `install-vllm.sh` is idempotent — re-run it after any change to profiles, the unit,
+or `inference-mode`. The vLLM version is pinned there (`VLLM_VERSION`); bump and re-run to
+upgrade.
+
+Check it came up: `inference-mode status` (says "ready on :8000"), or `./gpu-check`.
 
 ## Switching
 
@@ -65,8 +85,9 @@ inference-mode vllm gemma4-31b         # switch model
 inference-mode ollama                  # fall back to Ollama
 ```
 
-The chosen mode is enabled at boot and the others disabled. Loading a model takes a few
-minutes (weights + CUDA graph capture); `/health` returns 200 once it's ready.
+The chosen mode is enabled at boot and the others disabled. Choosing the profile that's
+already running restarts it. Loading a model takes 1–2 min with weights cached;
+`/health` returns 200 once it's ready, and requests fail until then.
 
 ## Usage
 
@@ -82,11 +103,13 @@ curl http://nvidia6000:8000/v1/chat/completions -H 'Content-Type: application/js
 
 Any OpenAI client works: base URL `http://nvidia6000:8000/v1`, any API key.
 
-Gemma thinking mode, per request:
+Gemma thinking mode is off by default. Turn it on per request by adding this to the
+request body:
 ```json
 "chat_template_kwargs": {"enable_thinking": true}
 ```
-The reasoning comes back in the `reasoning` field, separate from `content`.
+The reasoning comes back in the message's `reasoning` field, separate from `content`.
+Thinking uses extra output tokens, so raise `max_tokens`.
 
 ## Gotchas (all handled by `install-vllm.sh` / `vllm@.service`)
 

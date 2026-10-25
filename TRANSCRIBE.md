@@ -2,7 +2,7 @@
 
 Diarized, speaker-tagged transcription via WhisperX (`large-v3`) and pyannote. Runs on `4090x2` (dual RTX 4090). Accepts audio or video files; returns timestamped transcripts with speaker labels.
 
-**Cannot run at the same time as Ollama** — use `inference-mode` to switch.
+**Cannot run at the same time as vLLM or Ollama** — use `inference-mode` to switch.
 
 - API base: `http://4090x2:8765` (Tailscale)
 - Port: `8765`
@@ -15,7 +15,7 @@ Diarized, speaker-tagged transcription via WhisperX (`large-v3`) and pyannote. R
 
 ```bash
 # On 4090x2
-cd ~/inference
+cd ~/nvidia-linux-inference
 HF_TOKEN=hf_... ./install-transcribe.sh
 ```
 
@@ -25,12 +25,12 @@ You'll also need to accept the license terms for the two pyannote models on Hugg
 - https://huggingface.co/pyannote/speaker-diarization-3.1
 - https://huggingface.co/pyannote/segmentation-3.0
 
-### Switching between Ollama and transcription
+### Switching modes
 
 ```bash
-inference-mode transcribe   # stop Ollama, start transcription server
-inference-mode ollama       # stop transcription, start Ollama
-inference-mode status       # show which is currently running
+inference-mode transcribe           # stop vLLM/Ollama, start transcription server
+inference-mode vllm qwen3-coder-30b # back to vLLM (or: inference-mode ollama)
+inference-mode status               # show which is currently running
 ```
 
 ### Config
@@ -57,7 +57,7 @@ journalctl -u transcribe -f
 ### Updating the server
 
 ```bash
-cd ~/inference
+cd ~/nvidia-linux-inference
 # edit transcribe-server.py, then:
 sudo cp transcribe-server.py /opt/transcribe/transcribe-server.py
 sudo systemctl restart transcribe

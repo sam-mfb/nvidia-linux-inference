@@ -40,7 +40,7 @@ is what starts at boot. Full docs: `VLLM.md`.
 ```bash
 inference-mode status                  # what's running / enabled at boot
 inference-mode vllm                    # list this machine's profiles
-inference-mode vllm qwen3-coder-next   # nvidia6000 (4090x2: qwen3-coder-30b)
+inference-mode vllm qwen3-coder-next   # nvidia6000 (4090x2: qwen3-coder-30b); restarts if running
 inference-mode vllm gemma4-31b
 inference-mode ollama                  # fall back to Ollama
 
@@ -110,10 +110,10 @@ watch -n2 nvidia-smi               # refresh every 2s
 Run from the repo (not deployed):
 ```bash
 ./gpu-check          # driver module for running kernel, nvidia-smi, vLLM/Ollama up on GPU
-./gpu-check --fix    # install missing module, modprobe, restart Ollama (needs sudo, real terminal)
+./gpu-check --fix    # install missing module, modprobe, restart vLLM/Ollama (needs sudo, real terminal)
 ```
 Most common failure: a kernel upgrade without the matching `linux-modules-nvidia-*-open-<kver>`
-package — nvidia-smi fails and Ollama silently falls back to CPU.
+package — nvidia-smi fails, vLLM can't start, and Ollama silently falls back to CPU.
 
 Driver: 595.x on both machines. **nvidia6000** uses the open kernel module (required for Blackwell — see SYSTEM.md). **4090x2** uses the server-open variant.
 
@@ -149,6 +149,9 @@ grep "2026-05-14T18" /var/log/inference/metrics.csv | column -t -s,
 # Check timer is running
 systemctl status inference-monitor.timer
 ```
+
+`ollama_status` only tracks Ollama — it reads `inactive` while vLLM is serving
+(use `inference-mode status` for the current mode).
 
 Logs rotate daily, 30-day history, compressed. journald is persistent (survives reboots),
 capped at 2 GB, 30-day retention.
