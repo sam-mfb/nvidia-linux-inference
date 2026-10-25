@@ -44,11 +44,15 @@ vLLM serves one model at a time on `:8000` (OpenAI-compatible API). Ollama is th
 backup. They can't share the GPU — `inference-mode` switches, and the chosen mode
 is what starts at boot. Full docs: `VLLM.md`.
 
+**Defaults — keep these running:** nvidia6000 serves `qwen3-coder-next`; 4090x2 serves
+`gemma4-26b`. Clients (opencode) are configured for these. Other profiles are for
+occasional testing; switch back afterwards.
+
 ```bash
 inference-mode status                  # what's running / enabled at boot
 inference-mode vllm                    # list this machine's profiles
-inference-mode vllm qwen3-coder-next   # nvidia6000 (4090x2: qwen3-coder-30b); restarts if running
-inference-mode vllm gemma4-31b
+inference-mode vllm qwen3-coder-next   # nvidia6000 default; restarts if running
+inference-mode vllm gemma4-26b         # 4090x2 default
 inference-mode ollama                  # fall back to Ollama
 
 curl http://nvidia6000:8000/v1/models
@@ -222,7 +226,7 @@ HF_TOKEN=hf_... ./install-transcribe.sh
 ### Switch modes
 ```bash
 inference-mode transcribe   # stop vLLM/Ollama, start transcription server
-inference-mode vllm <profile>   # back to vLLM
+inference-mode vllm gemma4-26b  # back to the default vLLM model
 inference-mode status       # show which is currently running
 ```
 

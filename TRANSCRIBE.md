@@ -29,7 +29,7 @@ You'll also need to accept the license terms for the two pyannote models on Hugg
 
 ```bash
 inference-mode transcribe           # stop vLLM/Ollama, start transcription server
-inference-mode vllm qwen3-coder-30b # back to vLLM (or: inference-mode ollama)
+inference-mode vllm gemma4-26b      # back to the default vLLM model
 inference-mode status               # show which is currently running
 ```
 

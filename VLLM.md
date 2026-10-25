@@ -5,10 +5,22 @@ vLLM serves one model at a time, reserves ~90% of VRAM up front, and exposes an
 OpenAI-compatible API on port 8000. It cannot share the GPU(s) with Ollama or the
 transcription server — `inference-mode` switches between them.
 
-- API base: `http://<host>:8000/v1` (`nvidia6000` or `nvidia4090x2` — Tailscale names)
-- Model name in requests: the profile name (e.g. `qwen3-coder-next`) — only the profile
-  currently running is available; `curl http://<host>:8000/v1/models` shows which
-- Max 64 concurrent requests per server (`--max-num-seqs 64`); more are queued
+## Default deployment
+
+Each machine always serves one model. That's the mode enabled at boot, and clients can
+rely on it:
+
+| Machine (Tailscale name) | Serves | Use for | API base |
+|--------------------------|--------|---------|----------|
+| `nvidia6000` | `qwen3-coder-next` | coding / agents | `http://nvidia6000:8000/v1` |
+| `nvidia4090x2` | `gemma4-26b` | general chat, images, thinking | `http://nvidia4090x2:8000/v1` |
+
+The model name in requests is the profile name. The other profiles below are for
+occasional testing: switching a machine to one takes its default offline for clients until
+you switch back (see [Switching](#switching)).
+
+- Max 64 concurrent requests per server (`--max-num-seqs 64`); more are queued.
+- `curl http://<host>:8000/v1/models` shows what a server is serving right now.
 
 ---
 
@@ -21,7 +33,7 @@ deployed to `/etc/vllm/<profile>.conf`, run by the templated unit `vllm@<profile
 
 | Profile | Model | Weights | Context | Speed* |
 |---------|-------|---------|---------|--------|
-| `qwen3-coder-next` | Qwen/Qwen3-Coder-Next-FP8 — 80B MoE, 3B active | ~75 GB | 256K | ~195 tok/s |
+| `qwen3-coder-next` **(default)** | Qwen/Qwen3-Coder-Next-FP8 — 80B MoE, 3B active | ~75 GB | 256K | ~195 tok/s |
 | `gemma4-31b` | google/gemma-4-31B-it — dense, FP8 at load | ~31 GB | 256K | ~43 tok/s |
 | `gemma4-26b` | google/gemma-4-26B-A4B-it — MoE, 4B active, BF16 | ~52 GB | 256K | ~158 tok/s |
 
@@ -30,14 +42,14 @@ with weights cached. Gemma 31B at BF16 ran ~25 tok/s with only 128K context, hen
 
 ### 4090x2 (2 × RTX 4090, 48 GB, tensor-parallel across both)
 
-Reached at `nvidia4090x2` on the tailnet. `gemma4-26b` has been brought up and serves;
-the other two profiles haven't been run yet. Bring-up steps are under [Setup](#setup).
+Reached at `nvidia4090x2` on the tailnet. Only the default, `gemma4-26b`, has been run;
+the other two profiles are untested.
 
 | Profile | Model | Weights | Context |
 |---------|-------|---------|---------|
-| `qwen3-coder-30b` | Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8 | ~31 GB | 64K |
+| `gemma4-26b` **(default)** | google/gemma-4-26B-A4B-it, quantised to FP8 at load | ~26 GB | 32K |
 | `gemma4-31b` | google/gemma-4-31B-it-qat-w4a16-ct — Google's 4-bit QAT | ~23 GB | 32K |
-| `gemma4-26b` | google/gemma-4-26B-A4B-it, quantised to FP8 at load | ~26 GB | 32K |
+| `qwen3-coder-30b` | Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8 | ~31 GB | 64K |
 
 Qwen3-Coder-Next doesn't fit on 4090x2 (80 GB at FP8).
 
@@ -65,11 +77,12 @@ cd ~/nvidia-linux-inference
 git pull
 ./install-vllm.sh                      # gcc, uv, venv at /opt/vllm/venv, profiles, unit,
                                        # overcommit sysctl, inference-mode
-inference-mode vllm qwen3-coder-next   # 4090x2: qwen3-coder-30b
+inference-mode vllm qwen3-coder-next   # nvidia6000's default
+inference-mode vllm gemma4-26b         # 4090x2's default
 ```
 
-The second command stops Ollama, starts the profile, and makes it the mode that starts at
-boot. `install-vllm.sh` is idempotent — re-run it after any change to profiles, the unit,
+The last command stops Ollama, starts the machine's default profile, and makes it the mode
+that starts at boot. `install-vllm.sh` is idempotent — re-run it after any change to profiles, the unit,
 or `inference-mode`. The vLLM version is pinned there (`VLLM_VERSION`); bump and re-run to
 upgrade.
 
@@ -80,11 +93,14 @@ Check it came up: `inference-mode status` (says "ready on :8000"), or `./gpu-che
 ```bash
 inference-mode status                  # what's running, what starts at boot, vLLM ready?
 inference-mode vllm                    # list profiles
-inference-mode vllm gemma4-31b         # switch model
+inference-mode vllm gemma4-31b         # try another model
 inference-mode ollama                  # fall back to Ollama
+inference-mode vllm qwen3-coder-next   # back to the default (4090x2: gemma4-26b)
 ```
 
-The chosen mode is enabled at boot and the others disabled. Choosing the profile that's
+Switching takes the machine's default offline for every client until you switch back —
+and the chosen mode is also what starts at boot (the others are disabled), so a reboot
+won't restore the default on its own. Switch back when done. Choosing the profile that's
 already running restarts it. Loading a model takes 1–2 min with weights cached;
 `/health` returns 200 once it's ready, and requests fail until then.
 
@@ -98,9 +114,14 @@ curl http://nvidia6000:8000/v1/chat/completions -H 'Content-Type: application/js
   "model": "qwen3-coder-next",
   "messages": [{"role": "user", "content": "Write a bash one-liner to count lines in *.py"}]
 }'
+
+curl http://nvidia4090x2:8000/v1/chat/completions -H 'Content-Type: application/json' -d '{
+  "model": "gemma4-26b",
+  "messages": [{"role": "user", "content": "Explain what a heat pump is in two sentences."}]
+}'
 ```
 
-Any OpenAI client works: base URL `http://nvidia6000:8000/v1`, any API key.
+Any OpenAI client works with either base URL; any API key.
 
 Gemma thinking mode is off by default. Turn it on per request by adding this to the
 request body:
@@ -124,9 +145,7 @@ project's `opencode.json`) on the client machine:
       "name": "nvidia6000 (vLLM)",
       "options": { "baseURL": "http://nvidia6000:8000/v1" },
       "models": {
-        "qwen3-coder-next": { "name": "Qwen3 Coder Next", "limit": { "context": 262144, "output": 32768 } },
-        "gemma4-31b":       { "name": "Gemma 4 31B",      "limit": { "context": 262144, "output": 32768 } },
-        "gemma4-26b":       { "name": "Gemma 4 26B-A4B",  "limit": { "context": 262144, "output": 32768 } }
+        "qwen3-coder-next": { "name": "Qwen3 Coder Next", "limit": { "context": 262144, "output": 32768 } }
       }
     },
     "nvidia4090x2": {
@@ -134,9 +153,7 @@ project's `opencode.json`) on the client machine:
       "name": "nvidia4090x2 (vLLM)",
       "options": { "baseURL": "http://nvidia4090x2:8000/v1" },
       "models": {
-        "qwen3-coder-30b": { "name": "Qwen3 Coder 30B", "limit": { "context": 65536, "output": 8192 } },
-        "gemma4-31b":      { "name": "Gemma 4 31B",     "limit": { "context": 32768, "output": 8192 } },
-        "gemma4-26b":      { "name": "Gemma 4 26B-A4B", "limit": { "context": 32768, "output": 8192 } }
+        "gemma4-26b": { "name": "Gemma 4 26B-A4B", "limit": { "context": 32768, "output": 8192 } }
       }
     }
   },
@@ -144,12 +161,15 @@ project's `opencode.json`) on the client machine:
 }
 ```
 
-Pick a different model in opencode with `/models`.
+This lists just the two defaults, so both are always available: Qwen for coding (the
+default here), and Gemma via `/models`.
 
-- **Only the running profile answers.** Selecting any other model errors until you switch
-  the server to it with `inference-mode vllm <profile>`.
 - **Model keys must match profile names exactly** (vLLM serves each model under its
   profile name). Limits mirror each profile's `--max-model-len`; input + output share it.
+  Gemma's 32K context is small for agentic coding — keep it for lighter tasks.
+- **Using a non-default profile:** after switching a server to it, add it under that
+  provider's `models` with the context from the profile tables above. The default will
+  error until you switch back.
 - **No API key** — access is controlled by Tailscale.
 - **Check reachability from the client:** `curl http://nvidia6000:8000/v1/models`. If the
   hostname doesn't resolve, use the Tailscale IP in `baseURL`.
