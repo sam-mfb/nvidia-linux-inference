@@ -7,7 +7,7 @@
 #   gpu-check --fix    install the module for the running kernel, load it,
 #                      restart Ollama (needs sudo; run from a real terminal)
 #
-# Deployed to /usr/local/bin/gpu-check
+# Run from the repo: ./gpu-check (not deployed)
 
 set -uo pipefail
 
@@ -39,7 +39,7 @@ check() {
         bad "no nvidia module for $KVER — install $META_PKG"
     fi
 
-    if lsmod | grep -q '^nvidia '; then
+    if [ -d /sys/module/nvidia ]; then
         ok "nvidia module loaded"
     else
         bad "nvidia module not loaded"
@@ -86,7 +86,7 @@ fix() {
         sudo apt-get install -y "$META_PKG" || exit 1
     fi
 
-    if ! lsmod | grep -q '^nvidia '; then
+    if ! [ -d /sys/module/nvidia ]; then
         echo "Loading nvidia module..."
         if ! sudo modprobe nvidia; then
             echo "modprobe failed — reboot to finish: sudo reboot"

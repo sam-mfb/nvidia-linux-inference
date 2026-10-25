@@ -27,7 +27,7 @@ in a future kernel. The Aquantia AQC113 10 GbE NIC is used instead until then.
 
 ### NVIDIA Setup
 
-Driver: 595.71.05 | CUDA: 13.2
+Driver: 595.99.02 | CUDA: 13.2
 
 **Blackwell (GB202GL) requires the open kernel module.** The closed/proprietary driver fails with
 `RmInitAdapter failed` and `nvidia-smi` returns "No devices were found". Ubuntu's packaged
@@ -53,8 +53,10 @@ sudo depmod -a
 ```
 
 On kernel upgrade, the kernel-version-specific package (`linux-modules-nvidia-595-open-<kver>`)
-must be installed for the new kernel. The meta-package `linux-modules-nvidia-595-generic` pulls
-this in automatically.
+must be installed for the new kernel. The meta-package `linux-modules-nvidia-595-open-generic`
+pulls this in automatically (installed 2026-10-25 after a kernel upgrade to 7.0.0-38 left the GPU
+without a driver). Do **not** use `linux-modules-nvidia-595-generic` — it pulls the proprietary module.
+`./gpu-check --fix` handles this.
 
 ### Fan / Temperature Monitoring
 

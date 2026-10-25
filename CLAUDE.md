@@ -23,7 +23,6 @@ copy files to their destinations after editing.
 | `inference-monitor.timer` | `/etc/systemd/system/inference-monitor.timer` |
 | `inference.logrotate` | `/etc/logrotate.d/inference` |
 | `journald-persistence.conf` | `/etc/systemd/journald.conf.d/persistence.conf` |
-| `gpu-check` | `/usr/local/bin/gpu-check` |
 | `it87/` | **4090x2 only** — submodule, `make && sudo make install` |
 | `transcribe-server.py` | **4090x2 only** — `/opt/transcribe/transcribe-server.py` |
 | `transcribe.service` | **4090x2 only** — `/etc/systemd/system/transcribe.service` |
@@ -85,9 +84,10 @@ watch -n2 nvidia-smi               # refresh every 2s
 ```
 
 ### Health check
+Run from the repo (not deployed):
 ```bash
-gpu-check          # driver module for running kernel, nvidia-smi, Ollama using GPU
-gpu-check --fix    # install missing module, modprobe, restart Ollama (needs sudo, real terminal)
+./gpu-check          # driver module for running kernel, nvidia-smi, Ollama using GPU
+./gpu-check --fix    # install missing module, modprobe, restart Ollama (needs sudo, real terminal)
 ```
 Most common failure: a kernel upgrade without the matching `linux-modules-nvidia-*-open-<kver>`
 package — nvidia-smi fails and Ollama silently falls back to CPU.
