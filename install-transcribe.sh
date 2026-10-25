@@ -72,16 +72,14 @@ sudo chmod +x /usr/local/bin/inference-mode
 echo "→ Installing systemd service..."
 sudo cp "$SERVICE_SRC" /etc/systemd/system/transcribe.service
 sudo systemctl daemon-reload
-sudo systemctl enable transcribe.service
+# Not enabled here — inference-mode decides which service starts at boot
 
 echo ""
-echo "Done. To start the transcription server:"
-echo "  sudo systemctl stop ollama      # free the GPUs"
-echo "  sudo systemctl start transcribe"
+echo "Done. To start the transcription server (stops vLLM/Ollama):"
+echo "  inference-mode transcribe"
 echo ""
-echo "To switch back to Ollama:"
-echo "  sudo systemctl stop transcribe"
-echo "  sudo systemctl start ollama"
+echo "To switch back:"
+echo "  inference-mode vllm <profile>   # or: inference-mode ollama"
 echo ""
 echo "Health check (once running):"
 echo "  curl http://localhost:8765/health"

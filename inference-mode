@@ -1,72 +1,110 @@
 #!/usr/bin/env bash
-# Switch between Ollama and the transcription server.
+# Switch which inference service owns the GPU(s). The chosen mode is also
+# enabled at boot and the others disabled, so it survives a reboot.
 # Usage:
 #   inference-mode status
+#   inference-mode vllm <profile>    profiles are /etc/vllm/<profile>.conf
+#   inference-mode vllm              list profiles
 #   inference-mode ollama
-#   inference-mode transcribe
+#   inference-mode transcribe        4090x2 only
 #
 # Deployed to /usr/local/bin/inference-mode
 
 set -euo pipefail
 
 usage() {
-    echo "Usage: inference-mode <ollama|transcribe|status>"
+    echo "Usage: inference-mode <status | vllm [profile] | ollama | transcribe>"
     exit 1
 }
 
-status() {
-    local ollama_active transcribe_active
-    ollama_active=$(systemctl is-active ollama 2>/dev/null || true)
-    transcribe_active=$(systemctl is-active transcribe 2>/dev/null || true)
+unit_exists() {
+    [ -n "$(systemctl list-unit-files --no-legend "$1" 2>/dev/null)" ]
+}
 
-    if [ "$ollama_active" = "active" ] && [ "$transcribe_active" = "active" ]; then
-        echo "WARNING: both services are running (should not happen)"
-        echo "  ollama:     $ollama_active"
-        echo "  transcribe: $transcribe_active"
-    elif [ "$ollama_active" = "active" ]; then
-        echo "Mode: ollama  (transcribe: $transcribe_active)"
-    elif [ "$transcribe_active" = "active" ]; then
-        echo "Mode: transcribe  (ollama: $ollama_active)"
+profiles() {
+    local f
+    for f in /etc/vllm/*.conf; do
+        if [ -e "$f" ]; then basename "$f" .conf; fi
+    done
+}
+
+# Every unit that could hold the GPU: ollama, transcribe, each vllm@ profile
+all_units() {
+    local u p
+    for u in ollama.service transcribe.service; do
+        unit_exists "$u" && echo "$u"
+    done
+    if unit_exists vllm@.service; then
+        for p in $(profiles); do echo "vllm@$p.service"; done
+    fi
+}
+
+status() {
+    local u active=() enabled=()
+    for u in $(all_units); do
+        [ "$(systemctl is-active "$u" 2>/dev/null)" = "active" ] && active+=("${u%.service}")
+        [ "$(systemctl is-enabled "$u" 2>/dev/null)" = "enabled" ] && enabled+=("${u%.service}")
+    done
+
+    if [ ${#active[@]} -eq 0 ]; then
+        echo "Mode:    none (nothing running)"
+    elif [ ${#active[@]} -gt 1 ]; then
+        echo "WARNING: multiple services running: ${active[*]}"
     else
-        echo "Mode: none  (both stopped)"
-        echo "  ollama:     $ollama_active"
-        echo "  transcribe: $transcribe_active"
+        echo "Mode:    ${active[0]}"
+    fi
+    echo "At boot: ${enabled[*]:-none}"
+
+    if [[ " ${active[*]} " == *" vllm@"* ]]; then
+        if curl -sf -m 3 http://localhost:8000/health >/dev/null; then
+            echo "vLLM:    ready on :8000"
+        else
+            echo "vLLM:    not ready yet (loading?) — journalctl -u 'vllm@*' -f"
+        fi
     fi
 }
 
 switch_to() {
-    local target=$1
-    local other
-    [ "$target" = "ollama" ] && other="transcribe" || other="ollama"
+    local target=$1 u
 
-    local other_active
-    other_active=$(systemctl is-active "$other" 2>/dev/null || true)
+    unit_exists "$target" || { echo "$target is not installed on this machine."; exit 1; }
 
-    if [ "$other_active" = "active" ]; then
-        echo "Stopping $other..."
-        sudo systemctl stop "$other"
-    fi
+    for u in $(all_units); do
+        [ "$u" = "$target" ] && continue
+        if [ "$(systemctl is-active "$u" 2>/dev/null)" = "active" ]; then
+            echo "Stopping ${u%.service}..."
+            sudo systemctl stop "$u"
+        fi
+        if [ "$(systemctl is-enabled "$u" 2>/dev/null)" = "enabled" ]; then
+            sudo systemctl disable --quiet "$u"
+        fi
+    done
 
-    local target_active
-    target_active=$(systemctl is-active "$target" 2>/dev/null || true)
+    echo "Starting ${target%.service}..."
+    sudo systemctl enable --now --quiet "$target"
 
-    if [ "$target_active" = "active" ]; then
-        echo "$target is already running."
-    else
-        echo "Starting $target..."
-        sudo systemctl start "$target"
-        echo "$target started."
+    if [[ "$target" == vllm@* ]]; then
+        echo "Loading the model takes a few minutes (longer on first download):"
+        echo "  journalctl -u ${target%.service} -f"
     fi
 
     echo ""
     status
 }
 
-[ $# -eq 1 ] || usage
-
-case "$1" in
-    status)  status ;;
-    ollama)  switch_to ollama ;;
-    transcribe) switch_to transcribe ;;
+case "${1:-}" in
+    status)     [ $# -eq 1 ] || usage; status ;;
+    ollama)     [ $# -eq 1 ] || usage; switch_to ollama.service ;;
+    transcribe) [ $# -eq 1 ] || usage; switch_to transcribe.service ;;
+    vllm)
+        if [ $# -eq 1 ]; then
+            echo "Profiles (inference-mode vllm <profile>):"
+            profiles | sed 's/^/  /'
+        elif [ $# -eq 2 ] && [ -f "/etc/vllm/$2.conf" ]; then
+            switch_to "vllm@$2.service"
+        else
+            echo "No profile '${2:-}'. Available:"; profiles | sed 's/^/  /'; exit 1
+        fi
+        ;;
     *) usage ;;
 esac

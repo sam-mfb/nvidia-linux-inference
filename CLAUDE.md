@@ -23,12 +23,35 @@ copy files to their destinations after editing.
 | `inference-monitor.timer` | `/etc/systemd/system/inference-monitor.timer` |
 | `inference.logrotate` | `/etc/logrotate.d/inference` |
 | `journald-persistence.conf` | `/etc/systemd/journald.conf.d/persistence.conf` |
+| `vllm@.service` | `/etc/systemd/system/vllm@.service` (via `install-vllm.sh`) |
+| `sysctl-overcommit.conf` | `/etc/sysctl.d/90-inference-overcommit.conf` (via `install-vllm.sh`) |
+| `vllm/<hostname>/*.conf` | `/etc/vllm/` — model profiles (via `install-vllm.sh`) |
+| `inference-mode` | `/usr/local/bin/inference-mode` |
 | `it87/` | **4090x2 only** — submodule, `make && sudo make install` |
 | `transcribe-server.py` | **4090x2 only** — `/opt/transcribe/transcribe-server.py` |
 | `transcribe.service` | **4090x2 only** — `/etc/systemd/system/transcribe.service` |
-| `inference-mode` | **4090x2 only** — `/usr/local/bin/inference-mode` |
 
-## Ollama
+## vLLM (main inference server)
+
+vLLM serves one model at a time on `:8000` (OpenAI-compatible API). Ollama is the
+backup. They can't share the GPU — `inference-mode` switches, and the chosen mode
+is what starts at boot. Full docs: `VLLM.md`.
+
+```bash
+inference-mode status                  # what's running / enabled at boot
+inference-mode vllm                    # list this machine's profiles
+inference-mode vllm qwen3-coder-next   # nvidia6000 (4090x2: qwen3-coder-30b)
+inference-mode vllm gemma4-31b
+inference-mode ollama                  # fall back to Ollama
+
+curl http://nvidia6000:8000/v1/models
+journalctl -u 'vllm@*' -f
+```
+
+Profiles are `vllm/<hostname>/<profile>.conf` (model + serve flags); install/update with
+`./install-vllm.sh`. Weights cache: `~sam/.cache/huggingface`. venv: `/opt/vllm/venv`.
+
+## Ollama (backup)
 
 Ollama listens on `0.0.0.0:11434` (all interfaces, controlled by Tailscale at network level).
 Models are stored at `/usr/share/ollama/.ollama/models/`.
@@ -86,7 +109,7 @@ watch -n2 nvidia-smi               # refresh every 2s
 ### Health check
 Run from the repo (not deployed):
 ```bash
-./gpu-check          # driver module for running kernel, nvidia-smi, Ollama using GPU
+./gpu-check          # driver module for running kernel, nvidia-smi, vLLM/Ollama up on GPU
 ./gpu-check --fix    # install missing module, modprobe, restart Ollama (needs sudo, real terminal)
 ```
 Most common failure: a kernel upgrade without the matching `linux-modules-nvidia-*-open-<kver>`
@@ -170,7 +193,7 @@ SSH via Tailscale: `ssh sam@<hostname>` from any tailnet node.
 ## Transcription Server
 
 WhisperX (`large-v3`) + pyannote diarization. Whisper on `cuda:0`, diarization on `cuda:1`.
-**Cannot run alongside Ollama** — `Conflicts=ollama.service` is set in the unit file.
+**Cannot run alongside Ollama or vLLM** — `Conflicts=` in the unit files.
 
 | File | Deployed to |
 |------|------------|
@@ -188,8 +211,8 @@ HF_TOKEN=hf_... ./install-transcribe.sh
 
 ### Switch modes
 ```bash
-inference-mode transcribe   # stop Ollama, start transcription server
-inference-mode ollama       # stop transcription, start Ollama
+inference-mode transcribe   # stop vLLM/Ollama, start transcription server
+inference-mode vllm <profile>   # back to vLLM
 inference-mode status       # show which is currently running
 ```
 

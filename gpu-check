@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# Check that the NVIDIA driver works for the running kernel and that Ollama is
-# using the GPU. Common failure: a kernel upgrade without a matching
-# linux-modules-nvidia-* package, leaving Ollama silently running on CPU.
+# Check that the NVIDIA driver works for the running kernel and that the
+# inference server (vLLM or Ollama) is up on the GPU. Common failure: a kernel
+# upgrade without a matching linux-modules-nvidia-* package — vLLM fails to
+# start and Ollama silently falls back to CPU.
 # Usage:
 #   gpu-check          report status
 #   gpu-check --fix    install the module for the running kernel, load it,
-#                      restart Ollama (needs sudo; run from a real terminal)
+#                      restart vLLM/Ollama (needs sudo; run from a real terminal)
 #
 # Run from the repo: ./gpu-check (not deployed)
 
@@ -53,10 +54,18 @@ check() {
         bad "nvidia-smi failed: $(echo "$out" | head -1)"
     fi
 
-    local ollama_active
+    local ollama_active vllm_unit
     ollama_active=$(systemctl is-active ollama 2>/dev/null || true)
-    if [ "$ollama_active" != "active" ]; then
-        warn "ollama is $ollama_active (transcribe mode?) — skipping Ollama check"
+    vllm_unit=$(systemctl list-units --no-legend --plain --state=active 'vllm@*' 2>/dev/null \
+                | awk '{print $1}' | head -1)
+    if [ -n "$vllm_unit" ]; then
+        if curl -sf -m 3 http://localhost:8000/health >/dev/null; then
+            ok "${vllm_unit%.service} serving on :8000"
+        else
+            warn "${vllm_unit%.service} running but not ready (still loading?) — journalctl -u $vllm_unit -f"
+        fi
+    elif [ "$ollama_active" != "active" ]; then
+        warn "neither vLLM nor Ollama is running (transcribe mode?) — see inference-mode status"
     else
         # Ollama logs its detected compute devices at startup
         local compute
@@ -94,11 +103,16 @@ fix() {
         fi
     fi
 
-    if [ "$(systemctl is-active ollama 2>/dev/null)" = "active" ]; then
-        echo "Restarting Ollama..."
-        sudo systemctl restart ollama
-        sleep 5
-    fi
+    # Restart whichever server is meant to own the GPU (enabled at boot)
+    local u
+    for u in ollama.service $(ls /etc/vllm/*.conf 2>/dev/null \
+                              | sed -E 's|.*/(.+)\.conf$|vllm@\1.service|'); do
+        if [ "$(systemctl is-enabled "$u" 2>/dev/null)" = "enabled" ]; then
+            echo "Restarting ${u%.service}..."
+            sudo systemctl restart "$u"
+        fi
+    done
+    sleep 5
 
     echo ""
     check

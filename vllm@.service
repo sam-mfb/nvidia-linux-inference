@@ -1,0 +1,39 @@
+[Unit]
+Description=vLLM OpenAI-compatible server (%i)
+After=network-online.target
+Wants=network-online.target
+# vLLM reserves ~90% of VRAM up front — nothing else can share the GPU(s).
+# Conflicts= is symmetric, so starting ollama/transcribe also stops this.
+# Only one vllm@ instance at a time: inference-mode enforces that.
+Conflicts=ollama.service transcribe.service
+# Don't crash-loop forever on OOM / bad config
+StartLimitIntervalSec=600
+StartLimitBurst=3
+
+[Service]
+Type=simple
+User=sam
+Group=sam
+
+# Profile: VLLM_MODEL (HF repo id) and VLLM_ARGS (extra serve flags)
+EnvironmentFile=/etc/vllm/%i.conf
+# No CUDA toolkit is installed (driver only), so nothing can JIT-compile with
+# nvcc. Turn off the two components that do: DeepGEMM (FP8 matmuls → prebuilt
+# CUTLASS/Triton kernels) and FlashInfer's sampler (→ PyTorch sampler).
+Environment=VLLM_USE_DEEP_GEMM=0
+Environment=VLLM_USE_FLASHINFER_SAMPLER=0
+# Weights cache in ~sam/.cache/huggingface (shared with manual vllm/hf use)
+ExecStart=/opt/vllm/venv/bin/vllm serve ${VLLM_MODEL} \
+    --served-model-name %i \
+    --host 0.0.0.0 --port 8000 \
+    $VLLM_ARGS
+
+Restart=on-failure
+RestartSec=10
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=vllm-%i
+
+[Install]
+WantedBy=multi-user.target
