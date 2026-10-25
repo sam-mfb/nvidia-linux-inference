@@ -2,10 +2,17 @@
 
 This repo manages two headless inference servers on the same tailnet. See `SYSTEM.md` for full hardware specs.
 
-| Machine | Hostname | GPU | Tailscale IP |
-|---------|----------|-----|--------------|
-| `nvidia6000` | nvidia6000 | RTX PRO 6000 Blackwell (96 GB) — single | 100.92.253.56 |
-| `4090x2` | 4090x2 | RTX 4090 × 2 (24 GB each) | 100.88.241.33 |
+| Machine | OS hostname | GPU | Tailscale name |
+|---------|-------------|-----|----------------|
+| `nvidia6000` | nvidia6000 | RTX PRO 6000 Blackwell (96 GB) — single | `nvidia6000` (100.92.253.56) |
+| `4090x2` | 4090x2 | RTX 4090 × 2 (24 GB each) | `nvidia4090x2` |
+
+Connect over the tailnet by Tailscale name (full: `<name>.tail448057.ts.net`). The OS
+hostname is what `install-vllm.sh` uses to pick `vllm/<hostname>/`.
+
+Both are **tagged** Tailscale devices (nvidia6000 is `tag:ollama`). The ACLs let user
+devices reach them but not each other, so neither server can see or test the other —
+run checks for a machine from that machine or from a user device.
 
 Repo lives at `/home/sam/nvidia-linux-inference` on both machines.
 
@@ -74,8 +81,8 @@ ollama pull <model>
 curl http://nvidia6000:11434/api/tags
 OLLAMA_HOST=http://nvidia6000:11434 ollama run <model>
 
-curl http://4090x2:11434/api/tags
-OLLAMA_HOST=http://4090x2:11434 ollama run gemma4:26b-a4b-it-q8_0
+curl http://nvidia4090x2:11434/api/tags
+OLLAMA_HOST=http://nvidia4090x2:11434 ollama run gemma4:26b-a4b-it-q8_0
 ```
 
 ### Check what other nodes on the tailnet have
@@ -188,10 +195,10 @@ Auth key stored at `/etc/tailscale/authkey` (root:root, 600) — not in this rep
 ```bash
 tailscale status     # see all nodes
 tailscale ping nvidia6000
-tailscale ping 4090x2
+tailscale ping nvidia4090x2
 ```
 
-SSH via Tailscale: `ssh sam@<hostname>` from any tailnet node.
+SSH via Tailscale: `ssh sam@<tailscale-name>` from a user device (not from the other server).
 
 ## Transcription Server
 
@@ -224,24 +231,24 @@ See `TRANSCRIBE.md` for full client usage docs.
 ### Usage
 ```bash
 # Submit a file
-curl -X POST http://4090x2:8765/transcribe \
+curl -X POST http://nvidia4090x2:8765/transcribe \
   -F file=@interview.mp4 \
   -F num_speakers=2
 
 # Poll for result
-curl http://4090x2:8765/jobs/<job_id>
+curl http://nvidia4090x2:8765/jobs/<job_id>
 
 # Download as SRT
-curl "http://4090x2:8765/jobs/<job_id>?format=srt"
+curl "http://nvidia4090x2:8765/jobs/<job_id>?format=srt"
 
 # Plain text with speaker labels
-curl "http://4090x2:8765/jobs/<job_id>?format=txt"
+curl "http://nvidia4090x2:8765/jobs/<job_id>?format=txt"
 
 # List recent jobs
-curl http://4090x2:8765/jobs
+curl http://nvidia4090x2:8765/jobs
 
 # Health / model status
-curl http://4090x2:8765/health
+curl http://nvidia4090x2:8765/health
 ```
 
 Accepts: mp3, wav, flac, m4a, ogg (audio) and mp4, mkv, mov, avi, webm (video — ffmpeg extracts audio).

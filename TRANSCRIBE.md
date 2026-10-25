@@ -4,7 +4,7 @@ Diarized, speaker-tagged transcription via WhisperX (`large-v3`) and pyannote. R
 
 **Cannot run at the same time as vLLM or Ollama** — use `inference-mode` to switch.
 
-- API base: `http://4090x2:8765` (Tailscale)
+- API base: `http://nvidia4090x2:8765` (Tailscale)
 - Port: `8765`
 
 ---
@@ -67,12 +67,12 @@ sudo systemctl restart transcribe
 
 ## Client usage
 
-All examples use `4090x2` as the hostname (reachable from any Tailscale node).
+All examples use `nvidia4090x2`, the machine's Tailscale name (reachable from your user devices on the tailnet).
 
 ### Submit a file
 
 ```bash
-curl -X POST http://4090x2:8765/transcribe \
+curl -X POST http://nvidia4090x2:8765/transcribe \
   -F file=@interview.mp4
 ```
 
@@ -90,7 +90,7 @@ Returns:
 
 ```bash
 # With hints
-curl -X POST http://4090x2:8765/transcribe \
+curl -X POST http://nvidia4090x2:8765/transcribe \
   -F file=@panel.mp3 \
   -F num_speakers=4 \
   -F language=en
@@ -101,7 +101,7 @@ curl -X POST http://4090x2:8765/transcribe \
 ### Poll for status
 
 ```bash
-curl http://4090x2:8765/jobs/<job_id>
+curl http://nvidia4090x2:8765/jobs/<job_id>
 ```
 
 `status` will be one of: `queued` → `processing` → `done` | `failed`
@@ -133,13 +133,13 @@ When `done`, the response includes a `transcript` object:
 
 ```bash
 # SRT subtitles (for video players, Premiere, DaVinci, etc.)
-curl "http://4090x2:8765/jobs/<job_id>?format=srt" > transcript.srt
+curl "http://nvidia4090x2:8765/jobs/<job_id>?format=srt" > transcript.srt
 
 # Plain text with speaker labels (for reading / LLM input)
-curl "http://4090x2:8765/jobs/<job_id>?format=txt"
+curl "http://nvidia4090x2:8765/jobs/<job_id>?format=txt"
 
 # Full JSON with word-level timestamps
-curl "http://4090x2:8765/jobs/<job_id>?format=json"
+curl "http://nvidia4090x2:8765/jobs/<job_id>?format=json"
 ```
 
 SRT example:
@@ -169,7 +169,7 @@ Sounds good. What are we covering today?
 # Usage: transcribe <file> [num_speakers]
 FILE=$1
 SPEAKERS=${2:-}
-BASE=http://4090x2:8765
+BASE=http://nvidia4090x2:8765
 
 FORM="-F file=@$FILE"
 [ -n "$SPEAKERS" ] && FORM="$FORM -F num_speakers=$SPEAKERS"
@@ -190,20 +190,20 @@ curl -s "$BASE/jobs/$JOB?format=txt"
 ### List recent jobs
 
 ```bash
-curl http://4090x2:8765/jobs
-curl "http://4090x2:8765/jobs?limit=50"
+curl http://nvidia4090x2:8765/jobs
+curl "http://nvidia4090x2:8765/jobs?limit=50"
 ```
 
 ### Delete a job
 
 ```bash
-curl -X DELETE http://4090x2:8765/jobs/<job_id>
+curl -X DELETE http://nvidia4090x2:8765/jobs/<job_id>
 ```
 
 ### Health check
 
 ```bash
-curl http://4090x2:8765/health
+curl http://nvidia4090x2:8765/health
 ```
 
 ```json

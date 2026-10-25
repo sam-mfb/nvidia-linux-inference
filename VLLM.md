@@ -5,7 +5,7 @@ vLLM serves one model at a time, reserves ~90% of VRAM up front, and exposes an
 OpenAI-compatible API on port 8000. It cannot share the GPU(s) with Ollama or the
 transcription server — `inference-mode` switches between them.
 
-- API base: `http://<host>:8000/v1` (`nvidia6000` or `4090x2`)
+- API base: `http://<host>:8000/v1` (`nvidia6000` or `nvidia4090x2` — Tailscale names)
 - Model name in requests: the profile name (e.g. `qwen3-coder-next`) — only the profile
   currently running is available; `curl http://<host>:8000/v1/models` shows which
 - Max 64 concurrent requests per server (`--max-num-seqs 64`); more are queued
@@ -30,9 +30,8 @@ with weights cached. Gemma 31B at BF16 ran ~25 tok/s with only 128K context, hen
 
 ### 4090x2 (2 × RTX 4090, 48 GB, tensor-parallel across both)
 
-**Untested** — 4090x2 was offline when these were written. Sizes fit on paper; expect
-to tune `--max-model-len` / `--gpu-memory-utilization` on first run. Bring-up steps are
-under [Setup](#setup).
+Reached at `nvidia4090x2` on the tailnet. `gemma4-26b` has been brought up and serves;
+the other two profiles haven't been run yet. Bring-up steps are under [Setup](#setup).
 
 | Profile | Model | Weights | Context |
 |---------|-------|---------|---------|
@@ -130,10 +129,10 @@ project's `opencode.json`) on the client machine:
         "gemma4-26b":       { "name": "Gemma 4 26B-A4B",  "limit": { "context": 262144, "output": 32768 } }
       }
     },
-    "4090x2": {
+    "nvidia4090x2": {
       "npm": "@ai-sdk/openai-compatible",
-      "name": "4090x2 (vLLM)",
-      "options": { "baseURL": "http://4090x2:8000/v1" },
+      "name": "nvidia4090x2 (vLLM)",
+      "options": { "baseURL": "http://nvidia4090x2:8000/v1" },
       "models": {
         "qwen3-coder-30b": { "name": "Qwen3 Coder 30B", "limit": { "context": 65536, "output": 8192 } },
         "gemma4-31b":      { "name": "Gemma 4 31B",     "limit": { "context": 32768, "output": 8192 } },
